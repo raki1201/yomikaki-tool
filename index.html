@@ -8,16 +8,31 @@
 </head>
 <body>
   <header>
-    <h1>読み書きドリル</h1>
-    <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
-    <div id="progress-label"></div>
+    <div id="header-top">
+      <h1 id="header-title">読み書きドリル</h1>
+      <button id="btn-home" onclick="goHome()" style="display:none">問題集一覧</button>
+    </div>
+    <div id="progress-area" style="display:none">
+      <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
+      <div id="progress-label"></div>
+    </div>
   </header>
 
-  <main id="app">
+  <!-- 問題集選択画面 -->
+  <div id="set-selector" style="display:none">
+    <div id="set-card">
+      <p class="set-card-lead">問題集を選んでください</p>
+      <div id="set-list"></div>
+    </div>
+  </div>
+
+  <!-- メイン問題画面 -->
+  <main id="main-quiz" style="display:none">
     <div id="question-card">
       <div id="question-meta">
         <span id="question-number"></span>
         <span id="question-type"></span>
+        <span id="review-badge" style="display:none">復習</span>
       </div>
       <div id="instruction"></div>
       <div id="word-bank"></div>
@@ -30,7 +45,19 @@
     </div>
   </main>
 
-  <footer>
+  <!-- 結果サマリー画面 -->
+  <div id="summary-screen" style="display:none">
+    <div id="summary-card">
+      <p class="summary-title">お疲れさまでした！</p>
+      <div id="summary-stats"></div>
+      <div class="btn-row" style="margin-top:20px">
+        <button id="btn-review" onclick="startReview()" style="display:none">間違いを復習</button>
+        <button onclick="goHome()">問題集一覧へ</button>
+      </div>
+    </div>
+  </div>
+
+  <footer id="main-footer" style="display:none">
     <button id="btn-prev" onclick="prevQuestion()">← 前へ</button>
     <span id="footer-label"></span>
     <button id="btn-next-footer" onclick="nextQuestion()">次へ →</button>

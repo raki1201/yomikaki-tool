@@ -1,5 +1,7 @@
-const QUESTIONS_DATA = {
-  "title": "読み書きドリル No.1",
+if (!window.DRILL_SETS) window.DRILL_SETS = [];
+DRILL_SETS.push({
+  "id": "no1",
+  "title": "No.1",
   "questions": [
     {
       "id": 0,
@@ -236,4 +238,4 @@ const QUESTIONS_DATA = {
       "word_bank": ["ア じかに", "イ はじ", "ウ やにわに", "エ わざと", "オ 本腰", "カ 骨惜しみ", "キ 月並み", "ク とこしえ", "ケ あきらめ", "コ きざし"]
     }
   ]
-};
+});

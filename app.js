@@ -1,14 +1,105 @@
-let questions = QUESTIONS_DATA.questions;
+let questions = [];
 let current = 0;
 let userAnswers = {};
+let wrongQuestions = new Set(); // 不正解があった問題のインデックス（元のquestions配列上）
+let isReviewMode = false;
+let reviewIndices = []; // 復習対象の questions 内インデックス
+let reviewCurrent = 0;
 
-function loadQuestions() {
+// -------------------------------------------------------
+// 初期化・画面切り替え
+// -------------------------------------------------------
+
+function init() {
+  if (!window.DRILL_SETS || DRILL_SETS.length === 0) {
+    document.body.innerHTML = '<p style="padding:24px">問題データが見つかりません。</p>';
+    return;
+  }
+  if (DRILL_SETS.length === 1) {
+    startSet(0);
+  } else {
+    showSetSelector();
+  }
+}
+
+function showSetSelector() {
+  hide('main-quiz');
+  hide('main-footer');
+  hide('summary-screen');
+  hide('progress-area');
+  hide('btn-home');
+  show('set-selector', 'flex');
+
+  const list = document.getElementById('set-list');
+  list.innerHTML = '';
+  DRILL_SETS.forEach((set, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'set-btn';
+    btn.innerHTML = `<span class="set-btn-title">${set.title}</span><span class="set-btn-count">${set.questions.length}問</span>`;
+    btn.onclick = () => startSet(i);
+    list.appendChild(btn);
+  });
+}
+
+function goHome() {
+  isReviewMode = false;
+  if (DRILL_SETS.length === 1) {
+    startSet(0);
+  } else {
+    showSetSelector();
+  }
+}
+
+function startSet(i) {
+  questions = DRILL_SETS[i].questions;
+  current = 0;
+  userAnswers = {};
+  wrongQuestions = new Set();
+  isReviewMode = false;
+
+  hide('set-selector');
+  hide('summary-screen');
+  show('main-quiz', 'flex');
+  show('main-footer', 'flex');
+  show('progress-area');
+  if (DRILL_SETS.length > 1) show('btn-home');
+
+  document.getElementById('header-title').textContent = '読み書きドリル ' + DRILL_SETS[i].title;
+  document.getElementById('review-badge').style.display = 'none';
   renderQuestion();
 }
 
-function renderQuestion() {
-  const q = questions[current];
-  userAnswers[current] = userAnswers[current] || {};
+function startReview() {
+  reviewIndices = Array.from(wrongQuestions).sort((a, b) => a - b);
+  if (reviewIndices.length === 0) return;
+
+  isReviewMode = true;
+  reviewCurrent = 0;
+
+  hide('summary-screen');
+  show('main-quiz', 'flex');
+  show('main-footer', 'flex');
+  show('review-badge');
+
+  renderCurrentQuestion();
+}
+
+// -------------------------------------------------------
+// 問題表示
+// -------------------------------------------------------
+
+function activeIndex() {
+  return isReviewMode ? reviewIndices[reviewCurrent] : current;
+}
+
+function activeLength() {
+  return isReviewMode ? reviewIndices.length : questions.length;
+}
+
+function renderCurrentQuestion() {
+  const idx = activeIndex();
+  userAnswers[idx] = userAnswers[idx] || {};
+  const q = questions[idx];
 
   document.getElementById('question-number').textContent = `問${q.number}`;
   document.getElementById('question-type').textContent = q.type + (q.section ? `（${q.section}）` : '');
@@ -17,7 +108,6 @@ function renderQuestion() {
   document.getElementById('btn-next').style.display = 'none';
   document.getElementById('btn-check').style.display = 'inline-block';
 
-  // 語群（word_bank_itemsがある問3は専用UIで表示するので非表示）
   const wb = document.getElementById('word-bank');
   if (q.word_bank && !q.word_bank_items) {
     wb.classList.add('visible');
@@ -28,42 +118,51 @@ function renderQuestion() {
     wb.innerHTML = '';
   }
 
-  // 問題アイテム
   const container = document.getElementById('items-container');
   container.innerHTML = '';
 
-  // プログレス
-  const pct = ((current + 1) / questions.length) * 100;
+  const pos = isReviewMode ? reviewCurrent : current;
+  const len = activeLength();
+  const pct = ((pos + 1) / len) * 100;
   document.getElementById('progress-bar').style.width = pct + '%';
-  document.getElementById('progress-label').textContent = `${current + 1} / ${questions.length} 問`;
-  document.getElementById('footer-label').textContent = `${current + 1} / ${questions.length}`;
+  document.getElementById('progress-label').textContent = `${pos + 1} / ${len} 問`;
+  document.getElementById('footer-label').textContent = `${pos + 1} / ${len}`;
 
   if (q.type === '分類') {
-    renderClassify(q, container);
+    renderClassify(q, container, idx);
   } else if (q.type === '語群分類') {
-    renderWordBankClassify(q, container);
+    renderWordBankClassify(q, container, idx);
   } else if (q.type === '複数選択') {
-    renderMultiSelect(q, container);
+    renderMultiSelect(q, container, idx);
   } else if (q.type === '選択' || q.type === '選択（類義語）') {
-    renderSelect(q, container);
+    renderSelect(q, container, idx);
   } else if (q.type === '参照入力') {
-    renderRefInput(q, container);
+    renderRefInput(q, container, idx);
   } else {
-    renderWrite(q, container);
+    renderWrite(q, container, idx);
   }
 }
 
-function renderClassify(q, container) {
+// 後方互換のため renderQuestion も定義
+function renderQuestion() {
+  renderCurrentQuestion();
+}
+
+// -------------------------------------------------------
+// 各タイプのレンダラー（idx を引数に追加）
+// -------------------------------------------------------
+
+function renderClassify(q, container, idx) {
   const opts = q.options || ['A', 'B', 'C'];
   q.items.forEach((item, i) => {
     const div = document.createElement('div');
     div.className = 'item';
-    const saved = userAnswers[current][i] || '';
+    const saved = userAnswers[idx][i] || '';
 
     let btns = '';
     opts.forEach(opt => {
       const sel = saved === opt ? 'selected' : '';
-      btns += `<button class="classify-btn ${sel}" data-idx="${i}" data-val="${opt}" onclick="selectClassify(this)">${opt}</button>`;
+      btns += `<button class="classify-btn ${sel}" data-idx="${i}" data-val="${opt}" onclick="selectClassify(this,${idx})">${opt}</button>`;
     });
 
     div.innerHTML = `
@@ -76,9 +175,7 @@ function renderClassify(q, container) {
   });
 }
 
-// 問3用：語群の各単語に条件番号1〜5を割り当てるUI
-function renderWordBankClassify(q, container) {
-  // 条件一覧を先に表示
+function renderWordBankClassify(q, container, idx) {
   const refDiv = document.createElement('div');
   refDiv.className = 'conditions-ref';
   q.items.forEach(item => {
@@ -89,21 +186,19 @@ function renderWordBankClassify(q, container) {
   });
   container.appendChild(refDiv);
 
-  // 区切り線
   const hr = document.createElement('hr');
   hr.className = 'section-divider';
   container.appendChild(hr);
 
-  // 語群の各単語 → ボタン1〜5で条件を選ぶ
   q.word_bank_items.forEach((word, i) => {
     const div = document.createElement('div');
     div.className = 'item';
-    const saved = userAnswers[current][i] || '';
+    const saved = userAnswers[idx][i] || '';
 
     let btns = '';
     for (let n = 1; n <= 5; n++) {
       const sel = saved === String(n) ? 'selected' : '';
-      btns += `<button class="classify-btn ${sel}" data-idx="${i}" data-val="${n}" onclick="selectClassify(this)">${n}</button>`;
+      btns += `<button class="classify-btn ${sel}" data-idx="${i}" data-val="${n}" onclick="selectClassify(this,${idx})">${n}</button>`;
     }
 
     div.innerHTML = `
@@ -116,21 +211,20 @@ function renderWordBankClassify(q, container) {
   });
 }
 
-// 問4用：各条件に対して複数のボタンをトグル選択
-function renderMultiSelect(q, container) {
+function renderMultiSelect(q, container, idx) {
   const opts = Array.isArray(q.word_bank) ? q.word_bank : [];
   q.items.forEach((item, i) => {
     const div = document.createElement('div');
     div.className = 'item';
-    if (!Array.isArray(userAnswers[current][i])) {
-      userAnswers[current][i] = [];
+    if (!Array.isArray(userAnswers[idx][i])) {
+      userAnswers[idx][i] = [];
     }
-    const saved = userAnswers[current][i];
+    const saved = userAnswers[idx][i];
 
     let btns = '';
     opts.forEach(opt => {
       const sel = saved.includes(opt) ? 'selected' : '';
-      btns += `<button class="choice-btn ${sel}" data-idx="${i}" data-val="${opt}" onclick="toggleMultiChoice(this)">${opt}</button>`;
+      btns += `<button class="choice-btn ${sel}" data-idx="${i}" data-val="${opt}" onclick="toggleMultiChoice(this,${idx})">${opt}</button>`;
     });
 
     div.innerHTML = `
@@ -143,20 +237,20 @@ function renderMultiSelect(q, container) {
   });
 }
 
-function renderSelect(q, container) {
+function renderSelect(q, container, idx) {
   q.items.forEach((item, i) => {
     const div = document.createElement('div');
     div.className = 'item';
-    const saved = userAnswers[current][i] || '';
+    const saved = userAnswers[idx][i] || '';
 
     let choicesHtml = '';
     if (item.choices) {
       item.choices.forEach(c => {
         const sel = saved === c ? 'selected' : '';
-        choicesHtml += `<button class="choice-btn ${sel}" data-idx="${i}" data-val="${c}" onclick="selectChoice(this)">${c}</button>`;
+        choicesHtml += `<button class="choice-btn ${sel}" data-idx="${i}" data-val="${c}" onclick="selectChoice(this,${idx})">${c}</button>`;
       });
     } else {
-      choicesHtml = `<input class="answer-input" type="text" placeholder="記号を入力" value="${saved}" data-idx="${i}" oninput="saveInput(this)">`;
+      choicesHtml = `<input class="answer-input" type="text" placeholder="記号を入力" value="${saved}" data-idx="${i}" oninput="saveInput(this,${idx})">`;
     }
 
     const textHtml = item.reading ? `${item.text}（${item.reading}）` : item.text;
@@ -171,11 +265,11 @@ function renderSelect(q, container) {
   });
 }
 
-function renderRefInput(q, container) {
+function renderRefInput(q, container, idx) {
   q.items.forEach((item, i) => {
     const div = document.createElement('div');
     div.className = 'item';
-    const saved = userAnswers[current][i] || '';
+    const saved = userAnswers[idx][i] || '';
 
     const choicesHtml = item.choices
       ? '<div class="ref-choices">' + item.choices.map(c => `<span class="ref-choice">${c}</span>`).join('') + '</div>'
@@ -186,13 +280,13 @@ function renderRefInput(q, container) {
       <div class="item-body">
         <div class="item-text">${item.text}</div>
         ${choicesHtml}
-        <input class="answer-input" type="text" placeholder="漢字で入力" value="${saved}" data-idx="${i}" oninput="saveInput(this)">
+        <input class="answer-input" type="text" placeholder="漢字で入力" value="${saved}" data-idx="${i}" oninput="saveInput(this,${idx})">
       </div>`;
     container.appendChild(div);
   });
 }
 
-function renderWrite(q, container) {
+function renderWrite(q, container, idx) {
   q.items.forEach((item, i) => {
     const div = document.createElement('div');
     div.className = 'item';
@@ -201,13 +295,13 @@ function renderWrite(q, container) {
       let subHtml = '';
       item.sub_items.forEach((sub, j) => {
         const key = `${i}-${j}`;
-        const saved = userAnswers[current][key] || '';
+        const saved = userAnswers[idx][key] || '';
         subHtml += `
           <div class="sub-item">
             <span class="sub-label">${sub.label}</span>
             <div>
               <div class="sub-text">${sub.text}</div>
-              <input class="answer-input" type="text" placeholder="熟語を入力" value="${saved}" data-key="${key}" oninput="saveInputKey(this)">
+              <input class="answer-input" type="text" placeholder="熟語を入力" value="${saved}" data-key="${key}" oninput="saveInputKey(this,${idx})">
             </div>
           </div>`;
       });
@@ -218,61 +312,68 @@ function renderWrite(q, container) {
           ${subHtml}
         </div>`;
     } else {
-      const saved = userAnswers[current][i] || '';
+      const saved = userAnswers[idx][i] || '';
       const targetHtml = item.target ? `<div class="item-target">${item.target}</div>` : '';
       div.innerHTML = `
         <div class="item-number">${item.number}</div>
         <div class="item-body">
           <div class="item-text">${item.text}</div>
           ${targetHtml}
-          <input class="answer-input" type="text" placeholder="答えを入力" value="${saved}" data-idx="${i}" oninput="saveInput(this)">
+          <input class="answer-input" type="text" placeholder="答えを入力" value="${saved}" data-idx="${i}" oninput="saveInput(this,${idx})">
         </div>`;
     }
     container.appendChild(div);
   });
 }
 
-function selectClassify(btn) {
-  const idx = btn.dataset.idx;
+// -------------------------------------------------------
+// インタラクション
+// -------------------------------------------------------
+
+function selectClassify(btn, idx) {
+  const i = btn.dataset.idx;
   const val = btn.dataset.val;
-  userAnswers[current][idx] = val;
+  userAnswers[idx][i] = val;
   btn.closest('.classify-btns').querySelectorAll('.classify-btn').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
 }
 
-function toggleMultiChoice(btn) {
-  const idx = btn.dataset.idx;
+function toggleMultiChoice(btn, idx) {
+  const i = btn.dataset.idx;
   const val = btn.dataset.val;
-  if (!Array.isArray(userAnswers[current][idx])) {
-    userAnswers[current][idx] = [];
-  }
+  if (!Array.isArray(userAnswers[idx][i])) userAnswers[idx][i] = [];
   if (btn.classList.contains('selected')) {
     btn.classList.remove('selected');
-    userAnswers[current][idx] = userAnswers[current][idx].filter(v => v !== val);
+    userAnswers[idx][i] = userAnswers[idx][i].filter(v => v !== val);
   } else {
     btn.classList.add('selected');
-    userAnswers[current][idx].push(val);
+    userAnswers[idx][i].push(val);
   }
 }
 
-function selectChoice(btn) {
-  const idx = btn.dataset.idx;
+function selectChoice(btn, idx) {
+  const i = btn.dataset.idx;
   const val = btn.dataset.val;
-  userAnswers[current][idx] = val;
+  userAnswers[idx][i] = val;
   btn.closest('.choices').querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
 }
 
-function saveInput(input) {
-  userAnswers[current][input.dataset.idx] = input.value;
+function saveInput(input, idx) {
+  userAnswers[idx][input.dataset.idx] = input.value;
 }
 
-function saveInputKey(input) {
-  userAnswers[current][input.dataset.key] = input.value;
+function saveInputKey(input, idx) {
+  userAnswers[idx][input.dataset.key] = input.value;
 }
+
+// -------------------------------------------------------
+// 答え合わせ
+// -------------------------------------------------------
 
 function checkAnswers() {
-  const q = questions[current];
+  const idx = activeIndex();
+  const q = questions[idx];
   const items = q.word_bank_items || q.items || [];
   let correct = 0, wrong = 0, empty = 0, total = 0;
   const firstCA = items.length > 0 ? items[0].correct_answer : undefined;
@@ -282,13 +383,13 @@ function checkAnswers() {
     if (item.sub_items) {
       item.sub_items.forEach((sub, j) => {
         total++;
-        const val = userAnswers[current][`${i}-${j}`] || '';
+        const val = userAnswers[idx][`${i}-${j}`] || '';
         if (!val) { empty++; return; }
         if (sub.correct_answer) { val === sub.correct_answer ? correct++ : wrong++; }
       });
     } else {
       total++;
-      const val = userAnswers[current][i];
+      const val = userAnswers[idx][i];
       const isEmpty = Array.isArray(val) ? val.length === 0 : !val;
       if (isEmpty) { empty++; return; }
       if (hasCorrect) {
@@ -311,9 +412,9 @@ function checkAnswers() {
     } else {
       msg.textContent = `${correct} 問正解、${wrong} 問不正解。`;
       msg.className = 'result-ng';
+      wrongQuestions.add(idx); // 不正解があった問題を記録
     }
-    // 正誤をボタン・入力欄に反映
-    showCorrectness(q, items, hasCorrect);
+    showCorrectness(q, items);
   } else {
     msg.textContent = '✓ すべて入力済み！';
     msg.className = 'result-ok';
@@ -322,18 +423,14 @@ function checkAnswers() {
   document.getElementById('btn-next').style.display = 'inline-block';
 }
 
-function showCorrectness(q, items, hasCorrect) {
-  if (!hasCorrect) return;
+function showCorrectness(q, items) {
   const isWordBank = !!q.word_bank_items;
+  const idx = activeIndex();
 
   items.forEach((item, i) => {
-    const val = userAnswers[current][i] || '';
+    const val = userAnswers[idx][i] || '';
     const isCorrect = val === item.correct_answer;
 
-    // classify-btn を探す
-    const allItems = document.querySelectorAll('#items-container .item');
-    // word_bank_items の場合、条件一覧の分だけオフセットが必要
-    const offset = isWordBank ? q.items.length : 0; // conditions-ref は .item ではないので0でOK
     const itemEl = document.querySelectorAll('#items-container .item')[i];
     if (!itemEl) return;
 
@@ -342,6 +439,11 @@ function showCorrectness(q, items, hasCorrect) {
       selectedBtn.classList.remove('selected');
       selectedBtn.classList.add(isCorrect ? 'correct' : 'wrong');
     }
+    const choiceBtn = itemEl.querySelector('.choice-btn.selected');
+    if (choiceBtn) {
+      choiceBtn.classList.remove('selected');
+      choiceBtn.classList.add(isCorrect ? 'correct' : 'wrong');
+    }
     const input = itemEl.querySelector('.answer-input');
     if (input) {
       input.classList.add(isCorrect ? 'correct' : 'wrong');
@@ -349,20 +451,84 @@ function showCorrectness(q, items, hasCorrect) {
   });
 }
 
+// -------------------------------------------------------
+// ナビゲーション
+// -------------------------------------------------------
+
 function nextQuestion() {
-  if (current < questions.length - 1) {
-    current++;
-    renderQuestion();
-    window.scrollTo(0, 0);
+  if (isReviewMode) {
+    if (reviewCurrent < reviewIndices.length - 1) {
+      reviewCurrent++;
+      renderCurrentQuestion();
+      window.scrollTo(0, 0);
+    } else {
+      showSummary(true);
+    }
+  } else {
+    if (current < questions.length - 1) {
+      current++;
+      renderCurrentQuestion();
+      window.scrollTo(0, 0);
+    } else {
+      showSummary(false);
+    }
   }
 }
 
 function prevQuestion() {
-  if (current > 0) {
-    current--;
-    renderQuestion();
-    window.scrollTo(0, 0);
+  if (isReviewMode) {
+    if (reviewCurrent > 0) {
+      reviewCurrent--;
+      renderCurrentQuestion();
+      window.scrollTo(0, 0);
+    }
+  } else {
+    if (current > 0) {
+      current--;
+      renderCurrentQuestion();
+      window.scrollTo(0, 0);
+    }
   }
 }
 
-loadQuestions();
+// -------------------------------------------------------
+// サマリー画面
+// -------------------------------------------------------
+
+function showSummary(afterReview) {
+  hide('main-quiz');
+  hide('main-footer');
+  hide('progress-area');
+  show('summary-screen', 'flex');
+
+  const stats = document.getElementById('summary-stats');
+  const reviewBtn = document.getElementById('btn-review');
+
+  if (afterReview) {
+    stats.innerHTML = '<p class="summary-msg">復習が完了しました！</p>';
+    reviewBtn.style.display = 'none';
+  } else {
+    const total = questions.length;
+    const wrongCount = wrongQuestions.size;
+    const correctCount = total - wrongCount;
+    stats.innerHTML = `
+      <p class="summary-msg">${total} 問中 <strong>${correctCount}</strong> 問正解</p>
+      ${wrongCount > 0 ? `<p class="summary-sub">間違えた問題：${wrongCount} 問</p>` : '<p class="summary-sub">全問正解！素晴らしい！</p>'}
+    `;
+    reviewBtn.style.display = wrongCount > 0 ? 'inline-block' : 'none';
+  }
+}
+
+// -------------------------------------------------------
+// ユーティリティ
+// -------------------------------------------------------
+
+function show(id, displayType) {
+  document.getElementById(id).style.display = displayType || 'block';
+}
+
+function hide(id) {
+  document.getElementById(id).style.display = 'none';
+}
+
+init();
