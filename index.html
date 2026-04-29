@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>読み書きドリル</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>読み書きドリル</h1>
+    <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
+    <div id="progress-label"></div>
+  </header>
+
+  <main id="app">
+    <div id="question-card">
+      <div id="question-meta">
+        <span id="question-number"></span>
+        <span id="question-type"></span>
+      </div>
+      <div id="instruction"></div>
+      <div id="word-bank"></div>
+      <div id="items-container"></div>
+      <div id="result-message"></div>
+      <div class="btn-row">
+        <button id="btn-check" onclick="checkAnswers()">答え合わせ</button>
+        <button id="btn-next" onclick="nextQuestion()" style="display:none">次の問題 →</button>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <button id="btn-prev" onclick="prevQuestion()">← 前へ</button>
+    <span id="footer-label"></span>
+    <button id="btn-next-footer" onclick="nextQuestion()">次へ →</button>
+  </footer>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
